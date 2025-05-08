@@ -2,6 +2,7 @@ import socket
 import select
 import random
 import threading
+import time
 
 HOST = '127.0.0.1'
 PORT = 12344
@@ -24,6 +25,8 @@ class player_progess():
         self.count = self.count + 1
     def add_time(self,time_finished):
         self.time = time_finished
+    def finished(self):
+        self.socket.sendall("time up !!!")
 class game_progess():
     def __init__(self,fd):
         self.fd_list = []
@@ -39,9 +42,15 @@ class game_progess():
             if sock.socket == fd:
                 sock.add_time(time)
             break
-
-def game_room_handle(roomid,message_queue,sockfd_list):
-    game = game_progess(sockfd_list)
+    def time_up(self):
+        for player in self.fd_list:
+            player.finished()
+def is_convertible_to_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
 class game_message():
     def __init__(self,client_socket,message,roomid):
         self.socket = client_socket
@@ -52,6 +61,47 @@ class game_message_queue():
         self.queue = []
     def add(self,msg,client_socket,rid):
         self.queue.append(game_message(client_socket,msg,rid))
+    def remove_msg(self,msga,client_socket,rid):
+        for msge in self.queue:
+            if msge.socket == client_socket:
+                if msge.msg == msga:
+                    if msge.id == rid:
+                        self.queue.remove(msge)
+def game_room_handle(roomid,message_queue,sockfd_list):
+    game = game_progess(sockfd_list)
+    result = random.randint(1,100)
+    print(result)
+    countdown = 30
+    start_time = time.time()
+    while True:
+        elapsed = time.time() - start_time
+        remaining = countdown - elapsed
+
+        if remaining <= 0:
+            print("Time's up!")
+            break
+        for msge in message_queue.queue:
+            if msge.id == roomid:
+                if is_convertible_to_int(msge.msg) == False:
+                    msge.socket.sendall(b"your result is not valid, pls go with an interger")
+                    continue
+                data = int(msge.msg)
+                if data < result:
+                    msge.socket.sendall(b"your guess is smaller than the final result")
+                    game.incre(msge.socket)
+                    message_queue.remove_msg(msge.msg,msge.socket,roomid)
+                if data > result:
+                    msge.socket.sendall(b"your guess is bigger than the final result")
+                    game.incre(msge.socket)
+                    message_queue.remove_msg(msge.msg,msge.socket,roomid)
+                if data == result:
+                    msge.socket.sendall(b"you guess is right !!!!")
+                    game.incre(msge.socket)
+                    game.time(msge.socket,countdown-remaining)
+                    message_queue.remove_msg(msge.msg,msge.socket,roomid)
+
+
+
 class player():
     def __init__(self,client_socket,addr):
         self.sock = client_socket
@@ -97,6 +147,13 @@ class playerlist():
         for clients in self.list:
             if clients.room_id == id:
                 clients.in_game = True
+    def check_ingame(self,client_socket):
+        for clients in self.list:
+            if clients.sock == client_socket:
+                if clients.in_game == True:
+                    return 1
+                else:
+                    return -1
 class gameroom():
     def __init__(self,host,iden):
         self.host_sock = host
@@ -106,6 +163,12 @@ class gameroom():
         self.state = -1 # -1 : not ready, 0: ready, 1: game in progess
     def addplayer(self,player):
         self.guest_sock.append(player)
+    def fdlist(self):
+        temp =[]
+        temp.append(self.host_sock)
+        for sock in self.guest_sock:
+            temp.append(sock)
+        return temp
 class roomlist():
     def __init__(self):
         self.rlist = []
@@ -117,6 +180,11 @@ class roomlist():
         for room in self.rlist:
             if room.id == room_id:
                 room.addplayer(guest_socket)
+    def socklist(self,room_id):
+        for room in self.rlist:
+            if room.id == room_id:
+                temp = room.fdlist()
+        return temp
     
 # Create server socket
 player_list= playerlist()
@@ -154,6 +222,9 @@ while True:
                 data = notified_socket.recv(1024)
                 if data:
                     print(f"Received from {clients[notified_socket]}: {data.decode().strip()}")
+                    if player_list.check_ingame(notified_socket) == 1:
+                            roomid = player_list.check_host(notified_socket)
+                            msg_queue.add(data,notified_socket,roomid)
                     if (data.decode().strip() == "/create room"):
                             temp = player_list.check_create_room(notified_socket)
                             if temp == 1:
@@ -170,8 +241,8 @@ while True:
                             notified_socket.sendall(b"you are not the host")
                         else:
                             player_list.start_game(roomid)
-                            # dont touch this, still in development
-                            threading.Thread(target=game_room_handle,args= (roomid,msg_queue,))
+                            temp = room_list.socklist(roomid)
+                            threading.Thread(target=game_room_handle,args= (roomid,msg_queue,temp,)).start()
 
                     parts = data.decode().strip().split()
                     if(parts[0] == "/joinroom"):
