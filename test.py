@@ -7,6 +7,13 @@ import time
 HOST = '127.0.0.1'
 PORT = 12344
 
+event_finished_game = threading.Event()
+
+
+def finished_game(player_list,room_list,msg_queue):
+    while (1):
+        for msg in msg_queue.finised_queue :
+            player_list.add_finised_game(msg)
 class UniqueRandom:
     def __init__(self, start, end):
         self.pool = list(range(start, end))
@@ -26,7 +33,12 @@ class player_progess():
     def add_time(self,time_finished):
         self.time = time_finished
     def finished(self):
-        self.socket.sendall("time up !!!")
+        self.socket.sendall(b"time up !!!")
+    def point_cal(self):
+        base = 100
+        speed_bonus = max(0, int(100 - self.time))
+        guess_penalty = self.count * 5
+        return max(0, base + speed_bonus - guess_penalty)
 class game_progess():
     def __init__(self,fd):
         self.fd_list = []
@@ -45,6 +57,24 @@ class game_progess():
     def time_up(self):
         for player in self.fd_list:
             player.finished()
+    def announce_results(self):
+    # Step 1: Create a list of tuples (score, player)
+        scores = []
+        for player in self.fd_list:
+            score = player.point_cal()
+            scores.append((score, player))
+
+        # Step 2: Sort by score descending
+        scores.sort(reverse=True, key=lambda x: x[0])
+
+        # Step 3: Send rank and score to each player
+        for rank, (score, player) in enumerate(scores, start=1):
+            message = f"Game over! Your score: {score}. Your rank: {rank}."
+            try:
+                player.socket.sendall(message.encode())
+            except Exception as e:
+                print(f"Failed to send to client: {e}")
+
 def is_convertible_to_int(s):
     try:
         int(s)
@@ -59,14 +89,21 @@ class game_message():
 class game_message_queue():
     def __init__(self):
         self.queue = []
+        self.finised_queue = []
+        self.leave_queue = []
     def add(self,msg,client_socket,rid):
         self.queue.append(game_message(client_socket,msg,rid))
+        print("add mess to queue")
     def remove_msg(self,msga,client_socket,rid):
         for msge in self.queue:
             if msge.socket == client_socket:
                 if msge.msg == msga:
                     if msge.id == rid:
                         self.queue.remove(msge)
+    def add_finished_msg(self,roomid):
+        self.finised_queue.append(roomid)
+    def add_leave_queue(self,client_socket):
+        self.leave_queue.append(client_socket)
 def game_room_handle(roomid,message_queue,sockfd_list):
     game = game_progess(sockfd_list)
     result = random.randint(1,100)
@@ -99,7 +136,9 @@ def game_room_handle(roomid,message_queue,sockfd_list):
                     game.incre(msge.socket)
                     game.time(msge.socket,countdown-remaining)
                     message_queue.remove_msg(msge.msg,msge.socket,roomid)
-
+    game.time_up()
+    game.announce_results()
+    event_finished_game.set()
 
 
 class player():
@@ -110,12 +149,31 @@ class player():
         self.in_room = False
         self.host = False
         self.room_id = ""
+    def out(self):
+        print(f"{self.address}: room id {self.room_id} {self.in_room}")
 class playerlist():
     def __init__(self):
         self.list = []
         self.size = 0
     def add(self,user):
         self.list.append(user)
+    def leave_room(self,client_socket):
+        for client in self.list:
+            if client.sock == client_socket:
+                client.in_room = False
+                client.in_game = False
+                print("a player just leave the room")
+                client.room_id = ""
+    def roomdisban(self,roomid):
+        for client in self.list:
+            if client.room_id == roomid:
+                client.in_room = False
+                client.in_game = False
+                client.roomid = ""
+    def finised_game(self,rid):
+        for player in self.list :
+            if player.room_id == rid:
+                player.in_game = False
     def check_create_room(self,client_scoket):
         for clients in self.list:
             if clients.sock == client_scoket:
@@ -136,6 +194,8 @@ class playerlist():
         for clients in self.list:
             if clients.sock == client_socket:
                 clients.room_id = roomid
+                clients.in_room = True
+                
     def check_host(self,client_socket):
         for clients in self.list:
             if clients.sock == client_socket:
@@ -143,10 +203,17 @@ class playerlist():
                     return clients.room_id
                 else:
                     return -1
+    def get_room_id(self, client_socket):
+        for client in self.list:
+            if client.sock == client_socket:
+                return client.room_id
+        return None
+
     def start_game(self,id):
         for clients in self.list:
-            if clients.room_id == id:
+            if clients.room_id == id :
                 clients.in_game = True
+                print(f"Player {clients.address} is now in game.")
     def check_ingame(self,client_socket):
         for clients in self.list:
             if clients.sock == client_socket:
@@ -154,6 +221,9 @@ class playerlist():
                     return 1
                 else:
                     return -1
+    def print(self):
+        for clients in self.list:
+            clients.out()
 class gameroom():
     def __init__(self,host,iden):
         self.host_sock = host
@@ -169,11 +239,18 @@ class gameroom():
         for sock in self.guest_sock:
             temp.append(sock)
         return temp
+    def roomleave(self,clientsocket):
+        for client in self.guest_sock:
+            if client == client_socket:
+                self.guest_sock.remove(client)
 class roomlist():
     def __init__(self):
         self.rlist = []
         self.length = 0
-        
+    def leaveroom(self,rid,client_socket):
+        for room in self.rlist:
+            if room.id == rid:
+                room.roomleave(client_socket)  
     def add(self,room):
         self.rlist.append(room)
     def addguest(self,guest_socket,room_id):
@@ -184,13 +261,18 @@ class roomlist():
         for room in self.rlist:
             if room.id == room_id:
                 temp = room.fdlist()
-        return temp
+                return temp
+    def disband(self,room_id):
+        for room in self.rlist:
+            if room.id == room_id:
+                self.rlist.remove(room)
     
 # Create server socket
 player_list= playerlist()
 room_list= roomlist()
 ur = UniqueRandom(0, 10)
 msg_queue = game_message_queue()
+threading.Thread(target=finished_game,args= (player_list,room_list,msg_queue,)).start()
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((HOST, PORT))
@@ -223,16 +305,33 @@ while True:
                 if data:
                     print(f"Received from {clients[notified_socket]}: {data.decode().strip()}")
                     if player_list.check_ingame(notified_socket) == 1:
-                            roomid = player_list.check_host(notified_socket)
-                            msg_queue.add(data,notified_socket,roomid)
+                        roomid = player_list.get_room_id(notified_socket)
+                        print(f"request check room id {roomid}")
+                        if roomid is not None:
+                            msg_queue.add(data, notified_socket, roomid)
+                            
+                    if (data.decode().strip() == "/leave room"):
+                        if player_list.check_join_room(notified_socket) == -1:
+                            roomid = player_list.get_room_id(notified_socket)
+                            player_list.leave_room(notified_socket)
+                            room_list.leaveroom(roomid,notified_socket)
+                        else:
+                            notified_socket.sendall(b"you are not in any room")
+
+                    if (data.decode().strip() == "/disban"):
+                        roomid = player_list.check_host(notified_socket)
+                        if roomid == -1:
+                            notified_socket.sendall("you are not the host to do that")
+                        else:
+                            player_list.roomdisban(roomid)
                     if (data.decode().strip() == "/create room"):
                             temp = player_list.check_create_room(notified_socket)
                             if temp == 1:
                                 roomid = ur.get()
                                 room_list.add(gameroom(notified_socket,roomid))
                                 player_list.join_room(notified_socket,roomid)
-                                str = "success create a game room " + str(roomid)
-                                notified_socket.sendall(str.encode())
+                                msg = "success create a game room " + str(roomid)
+                                notified_socket.sendall(msg.encode())
                             if temp == -1: 
                                 notified_socket.sendall(b"you already in a game room")
                     if (data.decode().strip() == "/startgame"):
@@ -242,13 +341,17 @@ while True:
                         else:
                             player_list.start_game(roomid)
                             temp = room_list.socklist(roomid)
+                            player_list.print()
                             threading.Thread(target=game_room_handle,args= (roomid,msg_queue,temp,)).start()
 
                     parts = data.decode().strip().split()
                     if(parts[0] == "/joinroom"):
+                        print(f"a clients just join{parts[1]}")
                         if player_list.check_join_room(notified_socket) == 1:
-                            room_list.addguest(notified_socket,parts[1])
-                            player_list.join_room(notified_socket,parts[1])
+                            room_id = int(parts[1])
+                            print(f"{room_id}")
+                            room_list.addguest(notified_socket,room_id)
+                            player_list.join_room(notified_socket,room_id)
                             notified_socket.sendall(b"joined successfully")
                         else:
                             notified_socket.sendall(b"you already in a room")
