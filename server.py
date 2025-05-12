@@ -11,6 +11,11 @@ from classes.room_list import room_list
 from classes.unique_random import UniqueRandom
 from classes.game_message_queue import game_message_queue
 
+HOST = '127.0.0.1'
+PORT = 12344
+
+event_finished_game = threading.Event()
+
 class game_room():
     def __init__(self,host,iden):
         self.host_sock = host
@@ -31,11 +36,6 @@ class game_room():
             if client == client_socket:
                 self.guest_sock.remove(client)
 
-HOST = '127.0.0.1'
-PORT = 12344
-
-event_finished_game = threading.Event()
-
 
 def finished_game(player_list,room_list,msg_queue):
     while (1):
@@ -55,14 +55,16 @@ def game_room_handle(roomid,message_queue,sockfd_list):
     game = game_progress(sockfd_list)
     result = random.randint(1,100)
     print(result)
-    countdown = 30
+    countdown = 10
     start_time = time.time()
     while True:
         elapsed = time.time() - start_time
         remaining = countdown - elapsed
 
         if remaining <= 0:
-            print("[Log] Time's up for game in room" + roomid)
+            print("[Log] Time's up for game in room ID" + "[" + str(roomid) + "])")
+            game.time_up()
+            game.announce_results()
             break
         for msge in message_queue.queue:
             if msge.id == roomid:
@@ -133,7 +135,7 @@ while True:
                     print(f"[Log] Received from {clients[notified_socket]}: {data.decode().strip()}")
                     if player_list.check_ingame(notified_socket) == 1:
                         roomid = player_list.get_room_id(notified_socket)
-                        print(f"[Log] Request check room ID {roomid}")
+                        print(f"[Log] Request from room ID {roomid}")
                         if roomid is not None:
                             msg_queue.add(data, notified_socket, roomid)
                             
@@ -162,6 +164,7 @@ while True:
                             if temp == -1: 
                                 notified_socket.sendall(b"[Game] You are in a game room")
                     if (data.decode().strip() == "/start"):
+                        notified_socket.sendall(b"[Log] The Host started the game")
                         roomid = player_list.check_host(notified_socket)
                         if roomid == -1:
                             notified_socket.sendall(b"You are not the Host")
@@ -181,7 +184,7 @@ while True:
                             player_list.join_room(notified_socket,room_id)
                             notified_socket.sendall(b"[Room] Joined successfully")
                         else:
-                            notified_socket.sendall(b"[Game] You are in a room")
+                            notified_socket.sendall(b"[Room] You are in a room")
 
                 else:
                     # No data — client disconnected
