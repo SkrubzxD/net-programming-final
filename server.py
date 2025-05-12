@@ -62,31 +62,34 @@ def game_room_handle(roomid,message_queue,sockfd_list):
         remaining = countdown - elapsed
 
         if remaining <= 0:
-            print("Time's up!")
+            print("[Log] Time's up for game in room" + roomid)
             break
         for msge in message_queue.queue:
             if msge.id == roomid:
                 if is_convertible_to_int(msge.msg) == False:
-                    msge.socket.sendall(b"your result is not valid, pls go with an interger")
+                    msge.socket.sendall(b"[Game] Invalid results, input a number.")
                     message_queue.remove_msg(msge.msg,msge.socket,roomid)
                     continue
                 data = int(msge.msg)
                 if data < result:
-                    msge.socket.sendall(b"your guess is smaller than the final result")
+                    msge.socket.sendall(b"[Game] Guess a larger number.")
                     game.incre(msge.socket)
                     message_queue.remove_msg(msge.msg,msge.socket,roomid)
                 if data > result:
-                    msge.socket.sendall(b"your guess is bigger than the final result")
+                    msge.socket.sendall(b"[Game] Guess a smaller number.")
                     game.incre(msge.socket)
                     message_queue.remove_msg(msge.msg,msge.socket,roomid)
                 if data == result:
-                    msge.socket.sendall(b"you guess is right !!!!")
+                    msge.socket.sendall(b"[Game] Correct!!!!")
                     game.incre(msge.socket)
                     game.time(msge.socket,countdown-remaining)
                     message_queue.remove_msg(msge.msg,msge.socket,roomid)
+                    #msge.socket.sendall(b" /gamefinished")
+
     game.time_up()
     game.announce_results()
     message_queue.add_finished_msg(roomid)
+
 
     
 # Create server socket
@@ -120,48 +123,48 @@ while True:
             client_socket.setblocking(False)
             sockets_list.append(client_socket)
             clients[client_socket] = client_address
-            print(f"Accepted new connection from {client_address}")
+            print(f"[Log] Accepted new connection from {client_address}")
             player_list.add(player(client_socket,client_address))
 
         else:
             try:
                 data = notified_socket.recv(1024)
                 if data:
-                    print(f"Received from {clients[notified_socket]}: {data.decode().strip()}")
+                    print(f"[Log] Received from {clients[notified_socket]}: {data.decode().strip()}")
                     if player_list.check_ingame(notified_socket) == 1:
                         roomid = player_list.get_room_id(notified_socket)
-                        print(f"request check room id {roomid}")
+                        print(f"[Log] Request check room ID {roomid}")
                         if roomid is not None:
                             msg_queue.add(data, notified_socket, roomid)
                             
-                    if (data.decode().strip() == "/leave room"):
+                    if (data.decode().strip() == "/leave"):
                         if player_list.check_join_room(notified_socket) == -1:
                             roomid = player_list.get_room_id(notified_socket)
                             player_list.leave_room(notified_socket)
                             room_list.leaveroom(roomid,notified_socket)
                         else:
-                            notified_socket.sendall(b"you are not in any room")
+                            notified_socket.sendall(b"[Game] You are not in a room")
 
-                    if (data.decode().strip() == "/disban"):
+                    if (data.decode().strip() == "/disband"):
                         roomid = player_list.check_host(notified_socket)
                         if roomid == -1:
-                            notified_socket.sendall("you are not the host to do that")
+                            notified_socket.sendall("[Game] You are not the host.")
                         else:
                             player_list.roomdisban(roomid)
-                    if (data.decode().strip() == "/create room"):
+                    if (data.decode().strip() == "/create"):
                             temp = player_list.check_create_room(notified_socket)
                             if temp == 1:
                                 roomid = ur.get()
                                 room_list.add(game_room(notified_socket,roomid))
                                 player_list.join_room(notified_socket,roomid)
-                                msg = "[Log] Room created with ID [" + str(roomid) + "]"
+                                msg = "[Room] Room created with ID [" + str(roomid) + "]"
                                 notified_socket.sendall(msg.encode())
                             if temp == -1: 
-                                notified_socket.sendall(b"you already in a game room")
-                    if (data.decode().strip() == "/startgame"):
+                                notified_socket.sendall(b"[Game] You are in a game room")
+                    if (data.decode().strip() == "/start"):
                         roomid = player_list.check_host(notified_socket)
                         if roomid == -1:
-                            notified_socket.sendall(b"you are not the host")
+                            notified_socket.sendall(b"You are not the Host")
                         else:
                             player_list.start_game(roomid)
                             temp = room_list.socklist(roomid)
@@ -169,25 +172,25 @@ while True:
                             threading.Thread(target=game_room_handle,args= (roomid,msg_queue,temp,)).start()
 
                     parts = data.decode().strip().split()
-                    if(parts[0] == "/joinroom"):
-                        print(f"a clients just join{parts[1]}")
+                    if(parts[0] == "/join"):
+                        print(f"[Log] A client joined {parts[1]}")
                         if player_list.check_join_room(notified_socket) == 1:
                             room_id = int(parts[1])
                             print(f"{room_id}")
                             room_list.addguest(notified_socket,room_id)
                             player_list.join_room(notified_socket,room_id)
-                            notified_socket.sendall(b"joined successfully")
+                            notified_socket.sendall(b"[Room] Joined successfully")
                         else:
-                            notified_socket.sendall(b"you already in a room")
+                            notified_socket.sendall(b"[Game] You are in a room")
 
                 else:
                     # No data — client disconnected
-                    print(f"Closed connection from {clients[notified_socket]}")
+                    print(f"[Log] Closed connection from {clients[notified_socket]}")
                     sockets_list.remove(notified_socket)
                     del clients[notified_socket]
                     notified_socket.close()
             except ConnectionResetError:
-                print(f"Connection reset by {clients[notified_socket]}")
+                print(f"[Log] Connection reset by {clients[notified_socket]}")
                 sockets_list.remove(notified_socket)
                 del clients[notified_socket]
                 notified_socket.close()
