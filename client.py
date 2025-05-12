@@ -27,7 +27,6 @@ class game_room():
         for client in self.guest_sock:
             if client == client_socket:
                 self.guest_sock.remove(client)
-            
 
 try:
     client_socket.connect((HOST, PORT))
@@ -41,12 +40,22 @@ _, writable, _ = select.select([], [client_socket], [], .1)
 while(1):
     if client_socket in writable:
         message = input("Send a message: ")
-        if message.strip().lower() == 'exit':
+        if message.strip().lower() == '/exit':
             print("Exiting...")
             break
         elif message.strip() == "":
             continue
         client_socket.sendall(message.encode())
+    
+    # Check if the server has sent any response
+    readable, _, _ = select.select([client_socket], [], [], .1)
+    if client_socket in readable:
+        response = client_socket.recv(4096)
+        if response:
+            print(f"[Server] {response.decode().strip()}")
+        else:
+            print("Server closed the connection.")
+            break
 
     # Use select to wait until the socket is readable
     readable, _, _ = select.select([client_socket], [], [], .1)
