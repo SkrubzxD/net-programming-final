@@ -388,6 +388,7 @@ while True:
                         menu = send_menu(notified_socket, player_list)
                         welcome_msg = f"Welcome {username}! {menu}"
                         notified_socket.sendall(welcome_msg.encode())
+                        continue
                         
                     print(f"Received from {clients[notified_socket]}: {data.decode().strip()}")
                     
