@@ -28,10 +28,14 @@ class game_progress():
         # Step 2: Sort by score descending
         scores.sort(reverse=True, key=lambda x: x[0])
 
-        # Step 3: Send rank and score to each player
+        # Step 3: Send rank, score, and leaderboard to each player
+        leaderboard = "\n[Leaderboard]\n"
         for rank, (score, player) in enumerate(scores, start=1):
-            message = f"Game over! Your score: {score}. Your rank: {rank}."
+            leaderboard += f"Rank {rank}: Player {player.socket.getpeername()} - Score: {score}\n"
+
+        for rank, (score, player) in enumerate(scores, start=1):
+            message = f"\n[Game] Game over! Your score: {score}. Your rank: {rank}.\n{leaderboard}"
             try:
                 player.socket.sendall(message.encode())
             except Exception as e:
-                print(f"Failed to send to client: {e}")
+                print(f"[Log] Failed to send to client: {e}")
