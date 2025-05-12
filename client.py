@@ -2,7 +2,6 @@ import socket
 import select
 import sys
 
-from classes import game_room 
 HOST = '127.0.0.1'
 PORT = 12344
 
@@ -37,18 +36,22 @@ except BlockingIOError:
     pass
 
 # Use select to wait until the socket is writable (i.e., connected)
-_, writable, _ = select.select([], [client_socket], [], 5)
+_, writable, _ = select.select([], [client_socket], [], .1)
 
 while(1):
     if client_socket in writable:
-        message = input("type the message  ")
-        print(f"Sending: {message.strip()}")
+        message = input("Send a message: ")
+        if message.strip().lower() == 'exit':
+            print("Exiting...")
+            break
+        elif message.strip() == "":
+            continue
         client_socket.sendall(message.encode())
 
     # Use select to wait until the socket is readable
-    readable, _, _ = select.select([client_socket], [], [], 5)
+    readable, _, _ = select.select([client_socket], [], [], .1)
     if client_socket in readable:
         response = client_socket.recv(4096)
-        print(f"Received: {response.decode().strip()}")
+        print(f"[Server] {response.decode().strip()}")
 
 client_socket.close()
