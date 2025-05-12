@@ -452,6 +452,9 @@ while True:
                                         for sock in room_list.socklist(room_id):
                                             if sock != notified_socket:
                                                 sock.sendall(f"{player_list.get_player(notified_socket).name}: {chat_data}".encode())
+                                        send_menu_msg = send_menu(notified_socket, player_list)
+                                        msg = f"Message sent! {send_menu_msg}"
+                                        notified_socket.sendall(msg.encode())
                                     else:
                                         send_menu_msg = send_menu(notified_socket, player_list)
                                         msg = f"Empty message. {send_menu_msg}"
