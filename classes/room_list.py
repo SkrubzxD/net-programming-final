@@ -21,3 +21,11 @@ class room_list():
         for room in self.rlist:
             if room.id == room_id:
                 self.rlist.remove(room)
+    def start_game(self,room_id):
+        for room in self.rlist:
+            if room.id == room_id:
+                room.game_start()
+    def get_state(self,room_id):
+        for room in self.rlist:
+            if room.id == room_id:
+                return room.check_state()
