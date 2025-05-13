@@ -17,3 +17,7 @@ class game_message_queue():
         self.finised_queue.append(roomid)
     def add_leave_queue(self,client_socket):
         self.leave_queue.append(client_socket)
+    def remove_special_msg(self,roomid):
+        for msge in self.finised_queue:
+            if msge == roomid:
+                self.finised_queue.remove(msge)
