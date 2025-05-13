@@ -5,7 +5,7 @@ class room_list():
     def leaveroom(self,rid,client_socket):
         for room in self.rlist:
             if room.id == rid:
-                room.roomleave(client_socket)  
+                room.roomleave(client_socket)
     def add(self,room):
         self.rlist.append(room)
     def addguest(self,guest_socket,room_id):
