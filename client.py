@@ -8,59 +8,50 @@ PORT = 12344
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.setblocking(False)
 
-class game_room():
-    def __init__(self,host,iden):
-        self.host_sock = host
-        self.guest_sock =[]
-        self.capacity = 4
-        self.id = iden
-        self.state = -1 # -1 : not ready, 0: ready, 1: game in progess
-    def addplayer(self,player):
-        self.guest_sock.append(player)
-    def fdlist(self):
-        temp =[]
-        temp.append(self.host_sock)
-        for sock in self.guest_sock:
-            temp.append(sock)
-        return temp
-    def roomleave(self,clientsocket):
-        for client in self.guest_sock:
-            if client == client_socket:
-                self.guest_sock.remove(client)
-
 try:
     client_socket.connect((HOST, PORT))
 except BlockingIOError:
-    # Expected since it's non-blocking
     pass
 
-# Use select to wait until the socket is writable (i.e., connected)
-_, writable, _ = select.select([], [client_socket], [], .1)
-
-while(1):
-    if client_socket in writable:
-        message = input("Send a message: ")
-        if message.strip().lower() == '/exit':
-            print("Exiting...")
-            break
-        elif message.strip() == "":
-            continue
-        client_socket.sendall(message.encode())
-    
-    # Check if the server has sent any response
-    readable, _, _ = select.select([client_socket], [], [], .1)
+# Wait for the server to ask for the username
+while True:
+    readable, _, _ = select.select([client_socket], [], [], 5)
     if client_socket in readable:
         response = client_socket.recv(4096)
         if response:
-            print(f"[Server] {response.decode().strip()}")
+            print(response.decode().strip())
+            if "Please enter your username" in response.decode():
+                username = input().strip()
+                client_socket.sendall(username.encode())
+                break
         else:
             print("Server closed the connection.")
-            break
+            client_socket.close()
+            sys.exit()
 
-    # Use select to wait until the socket is readable
-    readable, _, _ = select.select([client_socket], [], [], .1)
-    if client_socket in readable:
-        response = client_socket.recv(4096)
-        print(f"[Server] {response.decode().strip()}")
+# Main loop for sending and receiving messages
+while True:
+    try:
+        # Use select to check for both server messages and user input
+        readable, _, _ = select.select([client_socket, sys.stdin], [], [])
+        if client_socket in readable:
+            response = client_socket.recv(4096)
+            if response:
+                print(response.decode().strip())
+            else:
+                print("Server closed the connection.")
+                break
+
+        if sys.stdin in readable:
+            message = sys.stdin.readline().strip()
+            if message:
+                client_socket.sendall(message.encode())
+
+    except KeyboardInterrupt:
+        print("\nDisconnected from the server.")
+        break
+    except ConnectionResetError:
+        print("Connection reset by the server.")
+        break
 
 client_socket.close()
