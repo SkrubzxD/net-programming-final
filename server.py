@@ -23,7 +23,7 @@ class game_room():
         self.guest_sock = []
         self.capacity = 4
         self.id = iden
-        self.state = -1  # -1: not ready, 0: ready, 1: game in progress
+        self.state = -1  # -1: not ready, s1: game in progress
 
     def addplayer(self, player):
         self.guest_sock.append(player)
@@ -38,12 +38,16 @@ class game_room():
         self.state = 1
     def get_state(self):
         return self.state
+    def done_game(self):
+        self.state = -1
 
 
 def finished_game(player_list, room_list, msg_queue):
     while True:
         for msg in msg_queue.finised_queue:
             player_list.finised_game(msg)
+            room_list.game_done(msg)
+            msg_queue.remove_special_msg(msg)
 
 
 def is_convertible_to_int(s):
@@ -58,7 +62,7 @@ def game_room_handle(roomid, message_queue, sockfd_list):
     game = game_progress(sockfd_list)
     result = random.randint(1, 100)
     print(result)
-    countdown = 30  # Updated countdown value from server2.py
+    countdown = 10  # Updated countdown value from server2.py
     start_time = time.time()
     while True:
         elapsed = time.time() - start_time
@@ -145,6 +149,9 @@ while True:
                         if roomid is not None:
                             msg_queue.add(data, notified_socket, roomid)
                         continue
+                    else: 
+                        print("msg is not added in the queue")
+                        
 
                     if data.decode().strip() == "/leave":
                         if player_list.check_join_room(notified_socket) == -1:
@@ -153,14 +160,14 @@ while True:
                             room_list.leaveroom(roomid, notified_socket)
                         else:
                             notified_socket.sendall(b"[Game] You are not in a room")
-
+                        continue
                     if data.decode().strip() == "/disband":
                         roomid = player_list.check_host(notified_socket)
                         if roomid == -1:
                             notified_socket.sendall(b"[Game] You are not the host.")
                         else:
                             player_list.roomdisban(roomid)
-
+                        continue
                     if data.decode().strip() == "/create":
                         temp = player_list.check_create_room(notified_socket)
                         if temp == 1:
@@ -171,7 +178,7 @@ while True:
                             notified_socket.sendall(msg.encode())
                         elif temp == -1:
                             notified_socket.sendall(b"[Game] You are in a game room")
-
+                        continue
                     if data.decode().strip() == "/start":
                         notified_socket.sendall(b"[Room] The Host started the game")
                         roomid = player_list.check_host(notified_socket)
@@ -183,10 +190,10 @@ while True:
                             temp = room_list.socklist(roomid)
                             player_list.print()
                             threading.Thread(target=game_room_handle, args=(roomid, msg_queue, temp)).start()
-
+                        continue
                     parts = data.decode().strip().split()
                     if parts[0] == "/join":
-                        print(f"[Log] A client joined {parts[1]}")
+                        print(f"[Log] A client tried to join {parts[1]}")
 
                         if player_list.check_join_room(notified_socket) == 1:
                             if room_list.check_state(int(parts[1])) == 1:
@@ -199,6 +206,7 @@ while True:
                             notified_socket.sendall(b"[Room] Joined successfully")
                         else:
                             notified_socket.sendall(b"[Room] You are in a room")
+                        continue
 
                 else:
                     # No data — client disconnected

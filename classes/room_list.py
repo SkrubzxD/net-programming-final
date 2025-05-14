@@ -25,7 +25,12 @@ class room_list():
         for room in self.rlist:
             if room.id == room_id:
                 room.game_start()
-    def get_state(self,room_id):
+    def check_state(self,room_id):
         for room in self.rlist:
             if room.id == room_id:
-                return room.check_state()
+                return room.get_state()
+    def game_done(self,room_id):
+        for room in self.rlist:
+            if room.id == room_id:
+                room.done_game()
+                break
