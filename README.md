@@ -9,7 +9,7 @@ Create a multiplayer number guessing game where players compete to guess a secre
 - ✅ Server managing multiple game rooms with 2-4 players each
 - ✅ Random number generation (1-100) for each game 
 - ✅ Turn-based gameplay with timeout mechanism 
-- ⌛️ Scoring system based on number of attempts and speed 
+- ✅ Scoring system based on number of attempts and speed 
 - ❌ Game chat functionality (Chưa implement) 
 - ✅ Leaderboard tracking 
 - ❌ Reconnection capability if a player disconnects 
