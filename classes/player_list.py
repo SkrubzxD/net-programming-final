@@ -68,6 +68,29 @@ class player_list():
                     return 1
                 else:
                     return -1
+    def get_player(self, client_socket):
+        for client in self.list:
+            if client.sock == client_socket:
+                return client
+    def set_ready(self,client_socket):
+        for clients in self.list:
+            if clients.sock == client_socket:
+                if clients.in_ready == False:
+                    clients.in_ready = True
+                    print(f"Player {clients.address} is now ready.")
+                else:
+                    clients.in_ready = False
+                    print(f"Player {clients.address} is not ready.")
+                break
+# check all players in the room are ready    
+    def check_all_ready(self, room_id):
+        ready = True
+        for clients in self.list:
+            if clients.room_id == room_id and not clients.host:  # Exclude the host
+                if not clients.in_ready:
+                    ready = False
+                    break
+        return ready
     def print(self):
         for clients in self.list:
             clients.out()
