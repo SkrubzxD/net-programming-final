@@ -6,5 +6,8 @@ class player():
         self.in_room = False
         self.host = False
         self.room_id = ""
+        self.in_ready = False #ready to start
+        self.name = "" #player name
+        
     def out(self):
         print(f"{self.address}: room id {self.room_id} {self.in_room}")
