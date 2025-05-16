@@ -135,87 +135,247 @@ while True:
             client_socket.setblocking(False)
             sockets_list.append(client_socket)
             clients[client_socket] = client_address
-            print(f"[Log] Accepted new connection from {client_address}")
-            player_list.add(player(client_socket, client_address))
+            print(f"Accepted new connection from {client_address}")
+
+            # Ask for username
+            client_socket.sendall(b"Please enter your username: ")
 
         else:
             try:
                 data = notified_socket.recv(1024)
                 if data:
-                    print(f"[Log] Received from {clients[notified_socket]}: {data.decode().strip()}")
+                    # handle username
+                    existing_player = player_list.get_player(notified_socket)
+                    if existing_player is None:
+                        # First message is the username
+                        username = data.decode().strip()
+                        if username in ["1", "2", "3", "x"] or username == "":
+                            msg = "Invalid username. Please enter a valid username: "
+                            notified_socket.sendall(msg.encode())
+                            continue
+
+                        new_player = player(notified_socket, clients[notified_socket])
+                        new_player.name = username
+                        player_list.add(new_player)
+                        print(f"Username '{username}' registered for {clients[notified_socket]}")
+                        menu = send_menu(notified_socket, player_list)
+                        welcome_msg = f"Welcome {username}! {menu}"
+                        notified_socket.sendall(welcome_msg.encode())
+                        continue
+                    print(f"Received from {clients[notified_socket]}: {data.decode().strip()}")
+                    
+                    #handle data from game
                     if player_list.check_ingame(notified_socket) == 1:
                         roomid = player_list.get_room_id(notified_socket)
-                        print(f"[Log] Request from room ID {roomid}")
+                        print(f"request check room id {roomid}")
                         if roomid is not None:
                             msg_queue.add(data, notified_socket, roomid)
-                        continue
-                    else: 
-                        print("msg is not added in the queue")
-                        
-
-                    if data.decode().strip() == "/leave":
-                        if player_list.check_join_room(notified_socket) == -1:
-                            roomid = player_list.get_room_id(notified_socket)
-                            player_list.leave_room(notified_socket)
-                            room_list.leaveroom(roomid, notified_socket)
-                        else:
-                            notified_socket.sendall(b"[Game] You are not in a room")
-                        continue
-                    if data.decode().strip() == "/disband":
-                        roomid = player_list.check_host(notified_socket)
-                        if roomid == -1:
-                            notified_socket.sendall(b"[Game] You are not the host.")
-                        else:
-                            player_list.roomdisban(roomid)
-                        continue
-                    if data.decode().strip() == "/create":
-                        temp = player_list.check_create_room(notified_socket)
-                        if temp == 1:
-                            roomid = ur.get()
-                            room_list.add(game_room(notified_socket, roomid))
-                            player_list.join_room(notified_socket, roomid)
-                            msg = f"[Room] Room created with ID [{roomid}]"
+                            continue # block futher process
+  
+                    # Room menu options
+                    if player_list.check_join_room(notified_socket) == -1:
+                        # option 1: start game
+                        if data.decode().strip() == "1":
+                            room_id = player_list.check_host(notified_socket)
+                            if room_id == -1:
+                                # Guest marking as ready                                
+                                player_list.set_ready(notified_socket)
+                                if player_list.get_player(notified_socket).in_ready == True:
+                                    msg = "You are now ready! Waiting for host to start the game."
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"{msg} {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+                                else:
+                                    msg = "You are now not ready!"
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"{msg} {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+                                
+                                notified_socket.sendall(msg.encode())
+                            else:
+                                # Host starting game
+                                if player_list.check_all_ready(room_id):
+                                    msg = "Game is starting!"
+                                    for sock in room_list.socklist(room_id):
+                                        try:
+                                            sock.sendall(msg.encode())
+                                        except:
+                                            continue
+                                    event_finished_game.clear() #useless 
+                                    room_list.start_game(roomid)
+                                    player_list.start_game(room_id)
+                                    threading.Thread(target=game_room_handle, args=(room_id, msg_queue, room_list.socklist(room_id))).start()
+                                else:
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"Not all players are ready! {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+             
+                        # Option 2: Chat
+                        elif data.decode().strip() == "2":
+                            msg = "Enter your message: "
                             notified_socket.sendall(msg.encode())
-                        elif temp == -1:
-                            notified_socket.sendall(b"[Game] You are in a game room")
-                        continue
-                    if data.decode().strip() == "/start":
-                        notified_socket.sendall(b"[Room] The Host started the game")
-                        roomid = player_list.check_host(notified_socket)
-                        if roomid == -1:
-                            notified_socket.sendall(b"You are not the Host")
-                        else:
-                            room_list.start_game(roomid)
-                            player_list.start_game(roomid)
-                            temp = room_list.socklist(roomid)
-                            player_list.print()
-                            threading.Thread(target=game_room_handle, args=(roomid, msg_queue, temp)).start()
-                        continue
-                    parts = data.decode().strip().split()
-                    if parts[0] == "/join":
-                        print(f"[Log] A client tried to join {parts[1]}")
+                            try:
+                                # Use select to ensure the socket is ready to read
+                                readable, _, _ = select.select([notified_socket], [], [], 5)
+                                if notified_socket in readable:
+                                    chat_data = notified_socket.recv(1024).decode().strip()
+                                    if chat_data:
+                                        room_id = player_list.get_room_id(notified_socket)
+                                        
+                                        for sock in room_list.socklist(room_id):
+                                            if sock != notified_socket:
+                                                sock.sendall(f"{player_list.get_player(notified_socket).name}: {chat_data}".encode())
+                                        send_menu_msg = send_menu(notified_socket, player_list)
+                                        msg = f"Message sent! {send_menu_msg}"
+                                        notified_socket.sendall(msg.encode())
+                                    else:
+                                        send_menu_msg = send_menu(notified_socket, player_list)
+                                        msg = f"Empty message. {send_menu_msg}"
+                                        notified_socket.sendall(msg.encode())
+                                else:
+                                    # No response from the client within the timeout
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"No response received. {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+                                    
+                            except Exception as e:
+                                print(f"Error while processing chat: {e}")
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"An error occurred. Please try again! {send_menu_msg}"
+                                notified_socket.sendall(msg.encode())
+                        # option x: leave game + disban          
+                        elif (data.decode().strip() == "x"):
+                            roomid = player_list.check_host(notified_socket)
 
-                        if player_list.check_join_room(notified_socket) == 1:
-                            if room_list.check_state(int(parts[1])) == 1:
-                                notified_socket.sendall(b"[Room] The game is in progress")
+                            if roomid == -1:
+                                roomid = player_list.get_room_id(notified_socket)
+                                player_list.leave_room(notified_socket)
+                                room_list.leaveroom(roomid,notified_socket)
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"you leave the room {send_menu_msg}"
+                                notified_socket.sendall(msg.encode())
                                 continue
-                            room_id = int(parts[1])
-                            print(f"{room_id}")
-                            room_list.addguest(notified_socket, room_id)
-                            player_list.join_room(notified_socket, room_id)
-                            notified_socket.sendall(b"[Room] Joined successfully")
-                        else:
-                            notified_socket.sendall(b"[Room] You are in a room")
-                        continue
 
+                            else:
+                                roomid = player_list.get_room_id(notified_socket)
+                                player_list.leave_room(notified_socket)
+                                room_list.disband(roomid)
+                                player_list.roomdisban(roomid)
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"room disbanded! {send_menu_msg}"
+                                notified_socket.sendall(msg.encode())
+                                continue
+                        # option wrong
+                        else:
+                            send_menu_msg = send_menu(notified_socket, player_list)
+                            msg = f"Unknown command. {send_menu_msg}"
+                            notified_socket.sendall(msg.encode())
+
+                    # Home menu options
+                    else:
+                        # option 1: create room
+                        if (data.decode().strip() == "1"):
+                                # set host status
+                                temp = player_list.check_create_room(notified_socket)
+
+                                if temp == 1:
+                                    roomid = ur.get()
+                                    room_list.add(game_room(notified_socket,roomid))
+                                    player_list.join_room(notified_socket,roomid)
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"Room {roomid} created! {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+
+ 
+                        # Option 2: Join room, check if game is in progress
+                        elif data.decode().strip() == "2":  
+                            notified_socket.sendall(b"Enter the room number: ")
+                            try:
+                                # Use select to ensure the socket is ready to read
+                                readable, _, _ = select.select([notified_socket], [], [], 5)
+                                if notified_socket in readable:
+                                    room_data = notified_socket.recv(1024).decode().strip()
+                                    if room_data.isdigit():
+                                        room_id = int(room_data)
+                                        # Check if the room exists
+                                        if any(room.id == room_id for room in room_list.rlist):
+                                            if room_list.check_state(room_id) == 1:
+                                                notified_socket.sendall(b"[Room] The game is in progress")
+                                                continue
+                                            # Add the player to the room
+                                            room_list.addguest(notified_socket, room_id)
+                                            player_list.join_room(notified_socket, room_id)
+                                            send_menu_msg = send_menu(notified_socket, player_list)
+                                            msg = f"Joined room {room_id}! {send_menu_msg}"
+                                            notified_socket.sendall(msg.encode())
+                                        else:
+                                            # Room does not exist
+                                            send_menu_msg = send_menu(notified_socket, player_list)
+                                            msg = f"Room {room_id} does not exist! {send_menu_msg}"
+                                            notified_socket.sendall(msg.encode())
+                                    else:
+                                        # Invalid input (not a number)
+                                        send_menu_msg = send_menu(notified_socket, player_list)
+                                        msg = f"Invalid input. Please enter a valid room number! {send_menu_msg}"
+                                        notified_socket.sendall(msg.encode())
+                                else:
+                                    # No response from the client within the timeout
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"No response received. {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+                            except Exception as e:
+                                print(f"Error while processing room join: {e}")
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"An error occurred. Please try again! {send_menu_msg}"
+                                notified_socket.sendall(msg.encode())
+                                
+                        # Option 3: List rooms
+                        elif (data.decode().strip() == "3"):  
+                            if len(room_list.rlist) == 0:
+                                msg = "No rooms available."
+                            else:
+                                msg = "Available rooms: \n"
+                                for room in room_list.rlist:
+                                    msg += f"Room ID: {room.id}, Number of player: {len(room.guest_sock) + 1}\n"
+                            send_menu_msg = send_menu(notified_socket, player_list)
+                            msg = f"{msg} {send_menu_msg}"
+                            notified_socket.sendall(msg.encode())
+
+                        # Option x: Leave game
+                        elif (data.decode().strip() == "x"):  
+                            msg = "Are you sure you want to leave the game? (y/n): "
+                            notified_socket.sendall(msg.encode())  
+                            # Wait for confirmation
+                            readable, _, _ = select.select([notified_socket], [], [], 5)
+                            if notified_socket in readable:
+                                confirmation = notified_socket.recv(1024).decode().strip()
+                                if confirmation.lower() == 'y':
+                                    msg = "Goodbye."
+                                    notified_socket.sendall(msg.encode())
+
+                                else:
+                                    send_menu_msg = send_menu(notified_socket, player_list)
+                                    msg = f"You chose to stay in the game. {send_menu_msg}"
+                                    notified_socket.sendall(msg.encode())
+                            else:
+                                # No response from the client within the timeout
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"Timeout. You are still in the game. {send_menu_msg}"
+                                notified_socket.sendall(msg.encode())
+                        # option wrong
+                        else:
+                            send_menu_msg = send_menu(notified_socket, player_list)
+                            msg = f"Unknown command. {send_menu_msg}"
+                            notified_socket.sendall(msg.encode())
+                    
                 else:
                     # No data — client disconnected
-                    print(f"[Log] Closed connection from {clients[notified_socket]}")
+                    print(f"Closed connection from {clients[notified_socket]}")
                     sockets_list.remove(notified_socket)
                     del clients[notified_socket]
                     notified_socket.close()
             except ConnectionResetError:
-                print(f"[Log] Connection reset by {clients[notified_socket]}")
+                print(f"Connection reset by {clients[notified_socket]}")
                 sockets_list.remove(notified_socket)
                 del clients[notified_socket]
                 notified_socket.close()
