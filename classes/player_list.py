@@ -11,6 +11,7 @@ class player_list():
                 client.in_game = False
                 print("a player just leave the room")
                 client.room_id = ""
+                client.host = False
     def roomdisban(self,roomid):
         for client in self.list:
             if client.room_id == roomid:
