@@ -258,12 +258,15 @@ while True:
 
                             else:
                                 roomid = player_list.get_room_id(notified_socket)
+                                socklist = room_list.socklist(roomid)
                                 player_list.leave_room(notified_socket)
                                 room_list.disband(roomid)
                                 player_list.roomdisban(roomid)
                                 send_menu_msg = send_menu(notified_socket, player_list)
-                                msg = f"room disbanded! {send_menu_msg}"
-                                notified_socket.sendall(msg.encode())
+                                msg = f"Room {roomid} disbanded! {send_menu_msg}"                                
+                                if socklist:
+                                    for sock in socklist:
+                                        sock.sendall(msg.encode())
                                 continue
                         # option wrong
                         else:
