@@ -99,8 +99,7 @@ def game_room_handle(roomid, message_queue, sockfd_list):
                     game.time(msge.socket, countdown - remaining)
                     message_queue.remove_msg(msge.msg, msge.socket, roomid)
 
-    game.time_up()
-    game.announce_results()
+
     message_queue.add_finished_msg(roomid)
     event_finished_game.set()
 
@@ -195,7 +194,7 @@ while True:
                             else:
                                 # Host starting game
                                 if player_list.check_all_ready(room_id):
-                                    msg = "Game is starting!"
+                                    msg = "Game started!"
                                     for sock in room_list.socklist(room_id):
                                         try:
                                             sock.sendall(msg.encode())
