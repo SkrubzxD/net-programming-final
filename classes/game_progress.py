@@ -18,7 +18,7 @@ class game_progress():
     def time_up(self):
         for player in self.fd_list:
             player.finished()
-    def announce_results(self):
+    def announce_results(self, player_list):
     # Step 1: Create a list of tuples (score, player)
         scores = []
         for player in self.fd_list:
@@ -31,7 +31,9 @@ class game_progress():
         # Step 3: Send rank, score, and leaderboard to each player
         leaderboard = "\n[Leaderboard]\n"
         for rank, (score, player) in enumerate(scores, start=1):
-            leaderboard += f"Rank {rank}: Player {player.socket.getpeername()} - Score: {score}\n"
+            player_obj = player_list.get_player(player.socket)
+            player_name = player_obj.name if player_obj else str(player.socket.getpeername())
+            leaderboard += f"Rank {rank}: Player {player_name} - Score: {score}\n"
 
         for rank, (score, player) in enumerate(scores, start=1):
             message = f"\n[Game] Game over! Your score: {score}. Your rank: {rank}.\n{leaderboard}"
