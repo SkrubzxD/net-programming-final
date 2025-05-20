@@ -35,7 +35,7 @@ class game_progress():
 
         for rank, (score, player) in enumerate(scores, start=1):
             message = f"\n[Game] Game over! Your score: {score}. Your rank: {rank}.\n{leaderboard}"
-        try:
-            player.socket.sendall(message.encode())
-        except Exception as e:
-            print(f"[Log] Failed to send to client: {e}")
+            try:
+                player.socket.sendall(message.encode())
+            except Exception as e:
+                print(f"[Log] Failed to send to client: {e}")
