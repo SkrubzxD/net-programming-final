@@ -258,12 +258,15 @@ while True:
 
                             else:
                                 roomid = player_list.get_room_id(notified_socket)
+                                socklist = room_list.socklist(roomid)
                                 player_list.leave_room(notified_socket)
                                 room_list.disband(roomid)
                                 player_list.roomdisban(roomid)
                                 send_menu_msg = send_menu(notified_socket, player_list)
-                                msg = f"room disbanded! {send_menu_msg}"
-                                notified_socket.sendall(msg.encode())
+                                msg = f"Room {roomid} disbanded! {send_menu_msg}"                                
+                                if socklist:
+                                    for sock in socklist:
+                                        sock.sendall(msg.encode())
                                 continue
                         # option wrong
                         else:
@@ -371,6 +374,26 @@ while True:
                 else:
                     # No data — client disconnected
                     print(f"Closed connection from {clients[notified_socket]}")
+                    # Remove from player_list and handle room logic
+                    player = player_list.get_player(notified_socket)
+                    if player:
+                        roomid = player.room_id
+                        is_host = player.host
+                        player_list.leave_room(notified_socket)
+                        if roomid:
+                            if is_host:
+                                # Host disconnected: disband room and notify others
+                                
+                                send_menu_msg = send_menu(notified_socket, player_list)
+                                msg = f"Room {roomid} disbanded! {send_menu_msg}"
+                                for sock in room_list.socklist(roomid):
+                                    if sock != notified_socket:
+                                        sock.sendall(msg.encode())
+                                room_list.disband(roomid)
+                                player_list.roomdisban(roomid)
+                            else:
+                                room_list.leaveroom(roomid, notified_socket)
+                    
                     sockets_list.remove(notified_socket)
                     del clients[notified_socket]
                     notified_socket.close()
