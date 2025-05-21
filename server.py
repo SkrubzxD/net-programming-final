@@ -96,7 +96,11 @@ def game_room_handle(roomid, message_queue, sockfd_list):
                     msge.socket.sendall(b"[Game] Correct!!!!")
                     msge.socket.sendall(b"Your guess is right!!!!")
                     game.incre(msge.socket)
-                    game.time(msge.socket, countdown - remaining)
+                    # Mark this player as correct and store their time
+                    for prog in game.fd_list:
+                        if prog.socket == msge.socket:
+                            prog.mark_correct(countdown - remaining)
+                            break
                     message_queue.remove_msg(msge.msg, msge.socket, roomid)
 
 
