@@ -71,7 +71,7 @@ def game_room_handle(roomid, message_queue, sockfd_list):
         if remaining <= 0:
             print(f"[Log] Time's up for game in room ID [{roomid}]")
             game.time_up()
-            game.announce_results()
+            game.announce_results(player_list)
             break
 
         for msge in message_queue.queue:
