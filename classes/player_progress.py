@@ -1,9 +1,10 @@
 class player_progress():
     def __init__(self,fd):
-        self.socket= fd
-        self.count= 0
+        self.socket = fd
+        self.count = 0
         self.time = 30
-        self.guess_in_time = -1
+        self.guessed_correct = False
+        self.correct_time = None
     def increment(self):
         self.count = self.count + 1
     def add_time(self,time_finished):
