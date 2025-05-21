@@ -12,10 +12,10 @@ class player_progress():
     def finished(self):
         self.socket.sendall(b"time up !!!")
     def point_cal(self):
-        if self.guess_in_time == 1:
+        if self.guessed_correct:
             base = 100
-            speed_bonus = max(0, int(100 - self.time))
+            speed_bonus = max(0, int(100 - self.correct_time))
             guess_penalty = self.count * 5
-            return max(0, base + speed_bonus - guess_penalty)
+            return max(10, base + speed_bonus - guess_penalty)
         else:
             return 0
