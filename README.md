@@ -10,7 +10,7 @@ Create a multiplayer number guessing game where players compete to guess a secre
 - ✅ Random number generation (1-100) for each game 
 - ✅ Turn-based gameplay with timeout mechanism 
 - ✅ Scoring system based on number of attempts and speed 
-- ❌ Game chat functionality (Chưa implement) 
+- ✅ Game chat functionality 
 - ✅ Leaderboard tracking 
 - ❌ Reconnection capability if a player disconnects 
 (Chưa implement) 
