@@ -378,10 +378,10 @@ while True:
                     # No data — client disconnected
                     print(f"Closed connection from {clients[notified_socket]}")
                     # Remove from player_list and handle room logic
-                    player = player_list.get_player(notified_socket)
-                    if player:
-                        roomid = player.room_id
-                        is_host = player.host
+                    pl = player_list.get_player(notified_socket)
+                    if pl:
+                        roomid = pl.room_id
+                        is_host = pl.host
                         player_list.leave_room(notified_socket)
                         if roomid:
                             if is_host:
